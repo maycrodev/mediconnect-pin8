@@ -1,0 +1,267 @@
+services:
+  # ============ BASES DE DATOS (Persistencia Poliglota) ============
+  postgres-auth:
+    image: postgres:15-alpine
+    container_name: mc-postgres-auth
+    environment:
+      POSTGRES_USER: mediconnect
+      POSTGRES_PASSWORD: mediconnect123
+      POSTGRES_DB: auth_db
+    ports:
+      - "5433:5432"
+    volumes:
+      - pg_auth_data:/var/lib/postgresql/data
+      - ./infrastructure/init-scripts/auth.sql:/docker-entrypoint-initdb.d/init.sql
+    networks:
+      - mediconnect-net
+
+  postgres-patient:
+    image: postgres:15-alpine
+    container_name: mc-postgres-patient
+    environment:
+      POSTGRES_USER: mediconnect
+      POSTGRES_PASSWORD: mediconnect123
+      POSTGRES_DB: patient_db
+    ports:
+      - "5434:5432"
+    volumes:
+      - pg_patient_data:/var/lib/postgresql/data
+      - ./infrastructure/init-scripts/patient.sql:/docker-entrypoint-initdb.d/init.sql
+    networks:
+      - mediconnect-net
+
+  postgres-doctor:
+    image: postgres:15-alpine
+    container_name: mc-postgres-doctor
+    environment:
+      POSTGRES_USER: mediconnect
+      POSTGRES_PASSWORD: mediconnect123
+      POSTGRES_DB: doctor_db
+    ports:
+      - "5435:5432"
+    volumes:
+      - pg_doctor_data:/var/lib/postgresql/data
+      - ./infrastructure/init-scripts/doctor.sql:/docker-entrypoint-initdb.d/init.sql
+    networks:
+      - mediconnect-net
+
+  postgres-appointment:
+    image: postgres:15-alpine
+    container_name: mc-postgres-appointment
+    environment:
+      POSTGRES_USER: mediconnect
+      POSTGRES_PASSWORD: mediconnect123
+      POSTGRES_DB: appointment_db
+    ports:
+      - "5436:5432"
+    volumes:
+      - pg_appointment_data:/var/lib/postgresql/data
+      - ./infrastructure/init-scripts/appointment.sql:/docker-entrypoint-initdb.d/init.sql
+    networks:
+      - mediconnect-net
+
+  mongo-medical-history:
+    image: mongo:6
+    container_name: mc-mongo-medical-history
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: mediconnect
+      MONGO_INITDB_ROOT_PASSWORD: mediconnect123
+      MONGO_INITDB_DATABASE: medical_history_db
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongo_history_data:/data/db
+    networks:
+      - mediconnect-net
+
+  mongo-video:
+    image: mongo:6
+    container_name: mc-mongo-video
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: mediconnect
+      MONGO_INITDB_ROOT_PASSWORD: mediconnect123
+      MONGO_INITDB_DATABASE: video_db
+    ports:
+      - "27018:27017"
+    volumes:
+      - mongo_video_data:/data/db
+    networks:
+      - mediconnect-net
+
+  redis:
+    image: redis:7-alpine
+    container_name: mc-redis
+    ports:
+      - "6379:6379"
+    networks:
+      - mediconnect-net
+
+  # ============ MENSAJERÍA ASÍNCRONA ============
+  rabbitmq:
+    image: rabbitmq:3-management-alpine
+    container_name: mc-rabbitmq
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+    environment:
+      RABBITMQ_DEFAULT_USER: mediconnect
+      RABBITMQ_DEFAULT_PASS: mediconnect123
+    networks:
+      - mediconnect-net
+
+  # ============ MICROSERVICIOS ============
+  auth-service:
+    build: ./services/auth-service
+    container_name: mc-auth-service
+    ports:
+      - "3001:3001"
+    environment:
+      PORT: 3001
+      DB_HOST: postgres-auth
+      DB_PORT: 5432
+      DB_USER: mediconnect
+      DB_PASS: mediconnect123
+      DB_NAME: auth_db
+      JWT_SECRET: mediconnect-super-secret-2026
+      RABBITMQ_URL: amqp://mediconnect:mediconnect123@rabbitmq:5672
+    depends_on:
+      - postgres-auth
+      - rabbitmq
+    networks:
+      - mediconnect-net
+
+  patient-service:
+    build: ./services/patient-service
+    container_name: mc-patient-service
+    ports:
+      - "3002:3002"
+    environment:
+      PORT: 3002
+      DB_HOST: postgres-patient
+      DB_PORT: 5432
+      DB_USER: mediconnect
+      DB_PASS: mediconnect123
+      DB_NAME: patient_db
+      RABBITMQ_URL: amqp://mediconnect:mediconnect123@rabbitmq:5672
+    depends_on:
+      - postgres-patient
+      - rabbitmq
+    networks:
+      - mediconnect-net
+
+  doctor-service:
+    build: ./services/doctor-service
+    container_name: mc-doctor-service
+    ports:
+      - "3003:3003"
+    environment:
+      PORT: 3003
+      DB_HOST: postgres-doctor
+      DB_PORT: 5432
+      DB_USER: mediconnect
+      DB_PASS: mediconnect123
+      DB_NAME: doctor_db
+      RABBITMQ_URL: amqp://mediconnect:mediconnect123@rabbitmq:5672
+    depends_on:
+      - postgres-doctor
+      - rabbitmq
+    networks:
+      - mediconnect-net
+
+  appointment-service:
+    build: ./services/appointment-service
+    container_name: mc-appointment-service
+    ports:
+      - "3004:3004"
+    environment:
+      PORT: 3004
+      DB_HOST: postgres-appointment
+      DB_PORT: 5432
+      DB_USER: mediconnect
+      DB_PASS: mediconnect123
+      DB_NAME: appointment_db
+      RABBITMQ_URL: amqp://mediconnect:mediconnect123@rabbitmq:5672
+      PATIENT_SERVICE_URL: http://patient-service:3002
+      DOCTOR_SERVICE_URL: http://doctor-service:3003
+    depends_on:
+      - postgres-appointment
+      - rabbitmq
+    networks:
+      - mediconnect-net
+
+  medical-history-service:
+    build: ./services/medical-history-service
+    container_name: mc-medical-history-service
+    ports:
+      - "3005:3005"
+    environment:
+      PORT: 3005
+      MONGO_URI: mongodb://mediconnect:mediconnect123@mongo-medical-history:27017/medical_history_db?authSource=admin
+      RABBITMQ_URL: amqp://mediconnect:mediconnect123@rabbitmq:5672
+    depends_on:
+      - mongo-medical-history
+      - rabbitmq
+    networks:
+      - mediconnect-net
+
+  videoconsultation-service:
+    build: ./services/videoconsultation-service
+    container_name: mc-videoconsultation-service
+    ports:
+      - "3006:3006"
+    environment:
+      PORT: 3006
+      MONGO_URI: mongodb://mediconnect:mediconnect123@mongo-video:27017/video_db?authSource=admin
+      RABBITMQ_URL: amqp://mediconnect:mediconnect123@rabbitmq:5672
+      ENCRYPTION_KEY: mediconnect-aes-256-encryption-k
+    depends_on:
+      - mongo-video
+      - rabbitmq
+    networks:
+      - mediconnect-net
+
+  api-gateway:
+    build: ./services/api-gateway
+    container_name: mc-api-gateway
+    ports:
+      - "3100:3000"
+    environment:
+      PORT: 3000
+      JWT_SECRET: mediconnect-super-secret-2026
+      AUTH_SERVICE_URL: http://auth-service:3001
+      PATIENT_SERVICE_URL: http://patient-service:3002
+      DOCTOR_SERVICE_URL: http://doctor-service:3003
+      APPOINTMENT_SERVICE_URL: http://appointment-service:3004
+      MEDICAL_HISTORY_SERVICE_URL: http://medical-history-service:3005
+      VIDEO_SERVICE_URL: http://videoconsultation-service:3006
+    depends_on:
+      - auth-service
+      - patient-service
+      - doctor-service
+      - appointment-service
+      - medical-history-service
+      - videoconsultation-service
+    networks:
+      - mediconnect-net
+
+  frontend:
+    image: nginx:alpine
+    container_name: mc-frontend
+    ports:
+      - "8080:80"
+    volumes:
+      - ./frontend:/usr/share/nginx/html
+    networks:
+      - mediconnect-net
+
+networks:
+  mediconnect-net:
+    driver: bridge
+
+volumes:
+  pg_auth_data:
+  pg_patient_data:
+  pg_doctor_data:
+  pg_appointment_data:
+  mongo_history_data:
+  mongo_video_data:

@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>MediConnect - Plataforma Nacional de Telemedicina</title>
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<header class="topbar">
+  <div class="brand">
+    <span class="logo">+</span>
+    <div>
+      <h1>MediConnect</h1>
+      <small>Plataforma Nacional de Telemedicina • MVP 1</small>
+    </div>
+  </div>
+  <nav id="nav" class="hidden">
+    <span id="userInfo"></span>
+    <button id="logoutBtn" class="btn-secondary">Cerrar sesión</button>
+  </nav>
+</header>
+
+<main id="app">
+  <!-- LOGIN -->
+  <section id="loginView" class="card-center">
+    <div class="card">
+      <h2>Iniciar sesión</h2>
+      <p class="muted">Acceso al Sistema Nacional de Salud</p>
+      <form id="loginForm">
+        <label>Email
+          <input type="email" id="email" required value="paciente1@mc.com">
+        </label>
+        <label>Contraseña
+          <input type="password" id="password" required value="password123">
+        </label>
+        <button type="submit" class="btn-primary">Ingresar</button>
+      </form>
+      <div class="quick-users">
+        <small>Usuarios demo:</small>
+        <button onclick="quickLogin('paciente1@mc.com')">Paciente</button>
+        <button onclick="quickLogin('medico1@mc.com')">Médico</button>
+        <button onclick="quickLogin('auditor@mc.com')">Auditor</button>
+      </div>
+      <div id="loginError" class="error"></div>
+    </div>
+  </section>
+
+  <!-- DASHBOARD PACIENTE -->
+  <section id="patientDashboard" class="hidden">
+    <div class="tabs">
+      <button class="tab active" data-tab="newAppointment">Agendar Cita</button>
+      <button class="tab" data-tab="myAppointments">Mis Citas</button>
+      <button class="tab" data-tab="myHistory">Mi Historial</button>
+    </div>
+
+    <div id="newAppointment" class="tab-panel active">
+      <h3>Agendar nueva cita</h3>
+      <form id="newApptForm" class="grid-form">
+        <label>Especialidad
+          <select id="specialty"><option value="">Todas</option></select>
+        </label>
+        <label>Médico
+          <select id="doctor"></select>
+        </label>
+        <label>Fecha
+          <input type="date" id="apptDate" required>
+        </label>
+        <label>Horario
+          <select id="apptTime" required></select>
+        </label>
+        <label>Modalidad
+          <select id="modality">
+            <option value="VIDEOCONSULTA">Videoconsulta</option>
+            <option value="PRESENCIAL">Presencial</option>
+          </select>
+        </label>
+        <label class="full">Motivo
+          <textarea id="reason" rows="2" placeholder="Describe tu motivo de consulta"></textarea>
+        </label>
+        <button type="submit" class="btn-primary full">Confirmar cita</button>
+      </form>
+      <div id="apptMsg" class="msg"></div>
+    </div>
+
+    <div id="myAppointments" class="tab-panel">
+      <h3>Mis citas</h3>
+      <div id="appointmentsList" class="list"></div>
+    </div>
+
+    <div id="myHistory" class="tab-panel">
+      <h3>Mi historial clínico electrónico</h3>
+      <div id="historyView"></div>
+    </div>
+  </section>
+
+  <!-- DASHBOARD MÉDICO -->
+  <section id="doctorDashboard" class="hidden">
+    <div class="tabs">
+      <button class="tab active" data-tab="docAgenda">Agenda</button>
+      <button class="tab" data-tab="docPatient">Buscar Paciente</button>
+    </div>
+    <div id="docAgenda" class="tab-panel active">
+      <h3>Mis citas agendadas</h3>
+      <div id="docAppointmentsList" class="list"></div>
+    </div>
+    <div id="docPatient" class="tab-panel">
+      <h3>Historial Clínico de Paciente</h3>
+      <div class="search-row">
+        <input type="text" id="patientSearch" placeholder="ID o DNI del paciente">
+        <button onclick="searchPatientHistory()" class="btn-primary">Buscar</button>
+      </div>
+      <div id="patientHistoryView"></div>
+    </div>
+  </section>
+
+  <!-- VIDEOCONSULTA -->
+  <section id="videoView" class="hidden">
+    <div class="video-room">
+      <div class="video-grid">
+        <div class="video-tile">
+          <video id="localVideo" autoplay muted playsinline></video>
+          <span class="tile-label">Tú</span>
+        </div>
+        <div class="video-tile">
+          <video id="remoteVideo" autoplay playsinline></video>
+          <span class="tile-label" id="remoteLabel">Esperando...</span>
+        </div>
+      </div>
+      <div class="captions" id="captionsBox" aria-live="polite">
+        <strong>Subtítulos en vivo:</strong>
+        <div id="captionsContent">— accesibilidad activada —</div>
+      </div>
+      <div class="controls">
+        <button id="micBtn" class="btn-circle">Mic</button>
+        <button id="camBtn" class="btn-circle">Cámara</button>
+        <button id="recordBtn" class="btn-circle danger">REC</button>
+        <button id="endCallBtn" class="btn-danger">Finalizar consulta</button>
+      </div>
+      <div id="videoInfo" class="muted"></div>
+    </div>
+    <aside class="video-side">
+      <h4>HCE del paciente</h4>
+      <div id="videoHistorySide"></div>
+      <h4>Notas de consulta</h4>
+      <textarea id="consultNotes" rows="6" placeholder="Diagnóstico, observaciones..."></textarea>
+      <button onclick="saveConsultation()" class="btn-primary">Guardar en HCE</button>
+    </aside>
+  </section>
+</main>
+
+<footer><small>MediConnect S.A.S. • Hackaton 4 • PIN8 • 2026</small></footer>
+
+<script src="app.js"></script>
+</body>
+</html>
