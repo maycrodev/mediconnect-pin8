@@ -3,15 +3,22 @@
 > **Hackaton 4 — Arquitectura de Software — PIN8 — 26/05/2026**
 > Proyecto **MediConnect S.A.S.** para el Ministerio de Salud (caso del kata).
 
-## MVP 1 (60% de la rúbrica)
+## MVPs implementados
 
-Implementa los requerimientos funcionales **I, II, III**:
+### MVP 1 (60%) — Funcionales I, II, III
 
 | Req | Descripción | Implementación |
 |-----|-------------|----------------|
 | I   | Agendar, modificar, cancelar citas | `appointment-service` + frontend |
 | II  | Videoconsultas en tiempo real con grabación cifrada | `videoconsultation-service` (WebRTC + AES-256-GCM) |
-| III | Acceso al historial clínico electrónico durante la consulta | `medical-history-service` (MongoDB) |
+| III | Acceso al HCE durante la consulta | `medical-history-service` (MongoDB) |
+
+### MVP 2 (70%) — Funcionales IV, V
+
+| Req | Descripción | Implementación |
+|-----|-------------|----------------|
+| IV  | Recetas digitales con firma electrónica + envío a farmacia | `prescription-service` (RSA-2048/SHA-256) + `pharmacy-service` |
+| V   | Recepción automática de resultados de laboratorios externos | `laboratory-service` (webhook + API key + worker validador) |
 
 Complementa con: **api-gateway**, **auth-service**, **patient-service**, **doctor-service**.
 
@@ -36,13 +43,16 @@ mediconnect-pin8/
 ├── docker-compose.yml                # Orquestación de todos los servicios
 ├── infrastructure/init-scripts/      # SQL de inicialización
 ├── services/
-│   ├── api-gateway/                 # Puerto 3000
+│   ├── api-gateway/                 # Puerto 3100 (proxy a 3000 interno)
 │   ├── auth-service/                # 3001 - PostgreSQL
 │   ├── patient-service/             # 3002 - PostgreSQL + COBOL mock
 │   ├── doctor-service/              # 3003 - PostgreSQL
 │   ├── appointment-service/         # 3004 - PostgreSQL + Outbox
 │   ├── medical-history-service/     # 3005 - MongoDB
-│   └── videoconsultation-service/   # 3006 - MongoDB + AES-256
+│   ├── videoconsultation-service/   # 3006 - MongoDB + AES-256
+│   ├── prescription-service/        # 3007 - PostgreSQL + RSA-2048
+│   ├── pharmacy-service/            # 3008 - PostgreSQL
+│   └── laboratory-service/          # 3009 - MongoDB + API key
 ├── frontend/                         # SPA HTML/JS sirve en :8080
 └── docs/                             # C4, ADRs, secuencia, despliegue
 ```
@@ -79,7 +89,23 @@ Servicios disponibles tras ~30s:
 
 ## Historias de Usuario (HU)
 
-Ver [docs/historias-de-usuario.md](docs/historias-de-usuario.md).
+- [HU MVP 1](docs/historias-de-usuario.md) (HU-01 a HU-07)
+- [HU MVP 2](docs/historias-de-usuario-mvp2.md) (HU-08 a HU-14)
+
+## Flujo de prueba MVP 2
+
+1. Login como **medico1@mc.com**, abre una videoconsulta.
+2. Tab lateral **Receta** → agrega medicamentos → opcionalmente elige farmacia → **Firmar y emitir**.
+3. Sin cerrar, tab lateral **Exámenes** → agrega tests → **Crear orden**.
+4. (Simulación de laboratorio externo) — usar curl para enviar resultado:
+   ```bash
+   curl -X POST http://localhost:3009/lab/results \
+     -H "Content-Type: application/json" \
+     -H "x-lab-api-key: lab-key-sanmartin-2026" \
+     -d '{"patientId":"11111111-1111-1111-1111-111111111111","patientDNI":"70123456","test_panel":"Hemograma","results":[{"code":"GLU","name":"Glucosa","value":118,"unit":"mg/dL","reference_min":70,"reference_max":110}]}'
+   ```
+5. Login como **paciente1@mc.com** → tab **Mis Recetas** → ver firmadas + enviar a farmacia.
+6. Tab **Mi Historial** → confirmar que el resultado del lab y los medicamentos aparecen automáticamente.
 
 ## Documentación de arquitectura
 

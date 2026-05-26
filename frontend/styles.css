@@ -92,9 +92,30 @@ input:focus, select:focus, textarea:focus { outline: 2px solid #1976d2; border-c
 .tile-label { position: absolute; bottom: 8px; left: 8px; background: rgba(0,0,0,.65); padding: 3px 8px; border-radius: 4px; font-size: .8rem; }
 .captions { background: rgba(0,0,0,.6); padding: 12px; border-radius: 8px; margin-top: 12px; font-size: .95rem; min-height: 50px; }
 .controls { display: flex; gap: 12px; justify-content: center; margin-top: 16px; align-items: center; }
-.video-side { background: #fff; padding: 18px; border-radius: 12px; box-shadow: 0 4px 14px rgba(0,0,0,.06); }
-.video-side h4 { color: #0d47a1; margin: 14px 0 8px; }
+.video-side { background: #fff; padding: 14px; border-radius: 12px; box-shadow: 0 4px 14px rgba(0,0,0,.06); max-height: 720px; overflow-y: auto; }
+.video-side h4 { color: #0d47a1; margin: 10px 0 8px; }
 .video-side textarea { width: 100%; }
+.side-tabs { display: flex; gap: 2px; border-bottom: 1px solid #e5e7eb; margin-bottom: 8px; }
+.side-tab { flex: 1; padding: 8px 4px; border: none; background: none; cursor: pointer; font-size: .85rem; color: #6b7280; border-bottom: 2px solid transparent; }
+.side-tab.active { color: #0d47a1; border-bottom-color: #1976d2; font-weight: 600; }
+.side-panel { display: none; }
+.side-panel.active { display: block; }
+
+.rx-item, .lab-item { background: #f9fafb; padding: 10px; border-radius: 8px; margin: 8px 0; position: relative; }
+.rx-item input, .lab-item input { padding: 6px 8px; font-size: .9rem; }
+.rx-item .row { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+.rx-remove { position: absolute; top: 6px; right: 6px; background: #fee2e2; color: #991b1b; border: none; border-radius: 50%; width: 22px; height: 22px; cursor: pointer; font-weight: bold; }
+
+.rx-card { padding: 14px; border: 1px solid #e5e7eb; border-radius: 10px; background: #fff; }
+.rx-card h4 { color: #0d47a1; margin-bottom: 6px; }
+.rx-card .folio { font-family: monospace; background: #eff6ff; padding: 2px 8px; border-radius: 4px; font-size: .85rem; }
+.rx-card .signature { font-family: monospace; font-size: .7rem; color: #6b7280; word-break: break-all; margin-top: 6px; background: #f9fafb; padding: 6px; border-radius: 4px; }
+.rx-card .meds { margin: 8px 0; }
+.rx-card .med-line { padding: 6px 0; border-bottom: 1px dashed #e5e7eb; }
+.rx-card .actions { margin-top: 10px; display: flex; gap: 8px; flex-wrap: wrap; }
+.rx-card .actions select { width: auto; flex: 1; }
+.badge-verified { background: #d1fae5; color: #065f46; padding: 3px 8px; border-radius: 12px; font-size: .75rem; }
+.badge-invalid { background: #fee2e2; color: #991b1b; padding: 3px 8px; border-radius: 12px; font-size: .75rem; }
 
 footer { text-align: center; padding: 20px; color: #9ca3af; }
 

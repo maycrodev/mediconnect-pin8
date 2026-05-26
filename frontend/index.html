@@ -52,6 +52,7 @@
       <button class="tab active" data-tab="newAppointment">Agendar Cita</button>
       <button class="tab" data-tab="myAppointments">Mis Citas</button>
       <button class="tab" data-tab="myHistory">Mi Historial</button>
+      <button class="tab" data-tab="myPrescriptions">Mis Recetas</button>
     </div>
 
     <div id="newAppointment" class="tab-panel active">
@@ -92,6 +93,12 @@
       <h3>Mi historial clínico electrónico</h3>
       <div id="historyView"></div>
     </div>
+
+    <div id="myPrescriptions" class="tab-panel">
+      <h3>Mis recetas digitales</h3>
+      <p class="muted">Todas las recetas tienen firma electrónica RSA-2048 con validez legal.</p>
+      <div id="prescriptionsList" class="list"></div>
+    </div>
   </section>
 
   <!-- DASHBOARD MÉDICO -->
@@ -99,6 +106,7 @@
     <div class="tabs">
       <button class="tab active" data-tab="docAgenda">Agenda</button>
       <button class="tab" data-tab="docPatient">Buscar Paciente</button>
+      <button class="tab" data-tab="docPrescriptions">Recetas Emitidas</button>
     </div>
     <div id="docAgenda" class="tab-panel active">
       <h3>Mis citas agendadas</h3>
@@ -111,6 +119,10 @@
         <button onclick="searchPatientHistory()" class="btn-primary">Buscar</button>
       </div>
       <div id="patientHistoryView"></div>
+    </div>
+    <div id="docPrescriptions" class="tab-panel">
+      <h3>Mis recetas emitidas</h3>
+      <div id="docPrescriptionsList" class="list"></div>
     </div>
   </section>
 
@@ -140,11 +152,52 @@
       <div id="videoInfo" class="muted"></div>
     </div>
     <aside class="video-side">
-      <h4>HCE del paciente</h4>
-      <div id="videoHistorySide"></div>
-      <h4>Notas de consulta</h4>
-      <textarea id="consultNotes" rows="6" placeholder="Diagnóstico, observaciones..."></textarea>
-      <button onclick="saveConsultation()" class="btn-primary">Guardar en HCE</button>
+      <div class="side-tabs">
+        <button class="side-tab active" data-side="sideHCE">HCE</button>
+        <button class="side-tab" data-side="sideRx">Receta</button>
+        <button class="side-tab" data-side="sideLab">Exámenes</button>
+        <button class="side-tab" data-side="sideNotes">Notas</button>
+      </div>
+
+      <div id="sideHCE" class="side-panel active">
+        <h4>HCE del paciente</h4>
+        <div id="videoHistorySide"></div>
+      </div>
+
+      <div id="sideRx" class="side-panel">
+        <h4>Emitir receta digital</h4>
+        <label>Diagnóstico
+          <input type="text" id="rxDiagnostico" placeholder="ej: HTA grado 1">
+        </label>
+        <div id="rxItems"></div>
+        <button type="button" onclick="addRxItem()" class="btn-secondary" style="width:100%;margin:6px 0">+ Agregar medicamento</button>
+        <label>Farmacia destino
+          <select id="rxPharmacy"><option value="">— Sin asignar (paciente elige luego) —</option></select>
+        </label>
+        <button onclick="issuePrescription()" class="btn-primary">Firmar y emitir</button>
+        <div id="rxMsg" class="msg"></div>
+      </div>
+
+      <div id="sideLab" class="side-panel">
+        <h4>Solicitar exámenes de laboratorio</h4>
+        <div id="labTests"></div>
+        <button type="button" onclick="addLabTest()" class="btn-secondary" style="width:100%;margin:6px 0">+ Agregar examen</button>
+        <label>Laboratorio sugerido
+          <select id="labPreferred">
+            <option>Laboratorio San Martín</option>
+            <option>AngloLab Perú</option>
+            <option>Laboratorio ROE</option>
+          </select>
+        </label>
+        <button onclick="createLabOrder()" class="btn-primary">Crear orden</button>
+        <div id="labMsg" class="msg"></div>
+      </div>
+
+      <div id="sideNotes" class="side-panel">
+        <h4>Notas de consulta</h4>
+        <textarea id="consultNotes" rows="8" placeholder="Diagnóstico, observaciones..."></textarea>
+        <button onclick="saveConsultation()" class="btn-primary">Guardar en HCE</button>
+      </div>
     </aside>
   </section>
 </main>

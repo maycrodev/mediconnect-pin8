@@ -88,6 +88,51 @@ services:
     networks:
       - mediconnect-net
 
+  # ============ MVP 2: DBs adicionales ============
+  postgres-prescription:
+    image: postgres:15-alpine
+    container_name: mc-postgres-prescription
+    environment:
+      POSTGRES_USER: mediconnect
+      POSTGRES_PASSWORD: mediconnect123
+      POSTGRES_DB: prescription_db
+    ports:
+      - "5437:5432"
+    volumes:
+      - pg_prescription_data:/var/lib/postgresql/data
+      - ./infrastructure/init-scripts/prescription.sql:/docker-entrypoint-initdb.d/init.sql
+    networks:
+      - mediconnect-net
+
+  postgres-pharmacy:
+    image: postgres:15-alpine
+    container_name: mc-postgres-pharmacy
+    environment:
+      POSTGRES_USER: mediconnect
+      POSTGRES_PASSWORD: mediconnect123
+      POSTGRES_DB: pharmacy_db
+    ports:
+      - "5438:5432"
+    volumes:
+      - pg_pharmacy_data:/var/lib/postgresql/data
+      - ./infrastructure/init-scripts/pharmacy.sql:/docker-entrypoint-initdb.d/init.sql
+    networks:
+      - mediconnect-net
+
+  mongo-laboratory:
+    image: mongo:6
+    container_name: mc-mongo-laboratory
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: mediconnect
+      MONGO_INITDB_ROOT_PASSWORD: mediconnect123
+      MONGO_INITDB_DATABASE: laboratory_db
+    ports:
+      - "27019:27017"
+    volumes:
+      - mongo_lab_data:/data/db
+    networks:
+      - mediconnect-net
+
   redis:
     image: redis:7-alpine
     container_name: mc-redis
@@ -220,6 +265,65 @@ services:
     networks:
       - mediconnect-net
 
+  # ============ MVP 2: Microservicios ============
+  prescription-service:
+    build: ./services/prescription-service
+    container_name: mc-prescription-service
+    ports:
+      - "3007:3007"
+    environment:
+      PORT: 3007
+      DB_HOST: postgres-prescription
+      DB_PORT: 5432
+      DB_USER: mediconnect
+      DB_PASS: mediconnect123
+      DB_NAME: prescription_db
+      RABBITMQ_URL: amqp://mediconnect:mediconnect123@rabbitmq:5672
+      PATIENT_SERVICE_URL: http://patient-service:3002
+      DOCTOR_SERVICE_URL: http://doctor-service:3003
+      PHARMACY_SERVICE_URL: http://pharmacy-service:3008
+      PRESCRIPTION_EXPIRY_DAYS: 30
+    depends_on:
+      - postgres-prescription
+      - rabbitmq
+    networks:
+      - mediconnect-net
+
+  pharmacy-service:
+    build: ./services/pharmacy-service
+    container_name: mc-pharmacy-service
+    ports:
+      - "3008:3008"
+    environment:
+      PORT: 3008
+      DB_HOST: postgres-pharmacy
+      DB_PORT: 5432
+      DB_USER: mediconnect
+      DB_PASS: mediconnect123
+      DB_NAME: pharmacy_db
+      RABBITMQ_URL: amqp://mediconnect:mediconnect123@rabbitmq:5672
+    depends_on:
+      - postgres-pharmacy
+      - rabbitmq
+    networks:
+      - mediconnect-net
+
+  laboratory-service:
+    build: ./services/laboratory-service
+    container_name: mc-laboratory-service
+    ports:
+      - "3009:3009"
+    environment:
+      PORT: 3009
+      MONGO_URI: mongodb://mediconnect:mediconnect123@mongo-laboratory:27017/laboratory_db?authSource=admin
+      RABBITMQ_URL: amqp://mediconnect:mediconnect123@rabbitmq:5672
+      LAB_API_KEYS: "lab-key-sanmartin-2026,lab-key-anglolab-2026,lab-key-roe-2026"
+    depends_on:
+      - mongo-laboratory
+      - rabbitmq
+    networks:
+      - mediconnect-net
+
   api-gateway:
     build: ./services/api-gateway
     container_name: mc-api-gateway
@@ -234,6 +338,9 @@ services:
       APPOINTMENT_SERVICE_URL: http://appointment-service:3004
       MEDICAL_HISTORY_SERVICE_URL: http://medical-history-service:3005
       VIDEO_SERVICE_URL: http://videoconsultation-service:3006
+      PRESCRIPTION_SERVICE_URL: http://prescription-service:3007
+      PHARMACY_SERVICE_URL: http://pharmacy-service:3008
+      LABORATORY_SERVICE_URL: http://laboratory-service:3009
     depends_on:
       - auth-service
       - patient-service
@@ -241,6 +348,9 @@ services:
       - appointment-service
       - medical-history-service
       - videoconsultation-service
+      - prescription-service
+      - pharmacy-service
+      - laboratory-service
     networks:
       - mediconnect-net
 
@@ -263,5 +373,8 @@ volumes:
   pg_patient_data:
   pg_doctor_data:
   pg_appointment_data:
+  pg_prescription_data:
+  pg_pharmacy_data:
   mongo_history_data:
   mongo_video_data:
+  mongo_lab_data:

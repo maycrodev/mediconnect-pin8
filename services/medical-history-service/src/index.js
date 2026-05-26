@@ -89,6 +89,9 @@ async function connectRabbit(retries = 10) {
       await rabbitChannel.bindQueue(q.queue, 'mediconnect.events', 'patient.created');
       // Escucha completación de citas para registrar consulta automáticamente
       await rabbitChannel.bindQueue(q.queue, 'mediconnect.events', 'appointment.completed');
+      // MVP 2: recetas y resultados de laboratorio
+      await rabbitChannel.bindQueue(q.queue, 'mediconnect.events', 'prescription.issued');
+      await rabbitChannel.bindQueue(q.queue, 'mediconnect.events', 'lab.result.received');
       rabbitChannel.consume(q.queue, async msg => {
         try {
           const data = JSON.parse(msg.content.toString());
@@ -110,6 +113,46 @@ async function connectRabbit(retries = 10) {
               { upsert: true, new: true }
             );
             console.log(`[medical-history] HCE inicializado para paciente ${p.id}`);
+          } else if (rk === 'prescription.issued' && data.patient_id) {
+            // Auto-actualiza meds en HCE (idempotente por prescriptionId)
+            const exists = await MedicalHistory.findOne({
+              patientId: data.patient_id,
+              'medications.recetado_por': data.prescriptionId
+            });
+            if (!exists) {
+              const meds = (data.items || []).map(it => ({
+                nombre: it.medication_name, dosis: it.dosis,
+                frecuencia: it.frecuencia, duracion: it.duracion,
+                recetado_por: data.prescriptionId, fecha: data.issued_at || new Date(),
+              }));
+              await MedicalHistory.findOneAndUpdate(
+                { patientId: data.patient_id },
+                { $push: { medications: { $each: meds } }, $set: { updatedAt: new Date() } },
+                { upsert: true, new: true }
+              );
+              console.log(`[medical-history] +${meds.length} medicamento(s) por receta ${data.folio}`);
+            }
+          } else if (rk === 'lab.result.received' && data.patientId) {
+            const exists = await MedicalHistory.findOne({
+              patientId: data.patientId,
+              'exams.archivo_url': `lab-result://${data.resultId}`,
+            });
+            if (!exists) {
+              const examEntries = (data.results || []).map(r => ({
+                type: 'laboratorio',
+                nombre: `${data.test_panel} → ${r.name}`,
+                fecha: data.reported_at || new Date(),
+                resultado: `${r.value}${r.unit ? ' ' + r.unit : ''}${r.abnormal ? ' (ANORMAL)' : ''}${r.reference ? ` [ref ${r.reference}]` : ''}`,
+                archivo_url: `lab-result://${data.resultId}`,
+                laboratorio: data.lab_name,
+              }));
+              await MedicalHistory.findOneAndUpdate(
+                { patientId: data.patientId },
+                { $push: { exams: { $each: examEntries } }, $set: { updatedAt: new Date() } },
+                { upsert: true, new: true }
+              );
+              console.log(`[medical-history] +${examEntries.length} resultado(s) de ${data.lab_name}`);
+            }
           } else if (rk === 'appointment.completed' && data.patient_id) {
             // Idempotente: no duplica si ya hay consulta con ese appointmentId
             const exists = await MedicalHistory.findOne({

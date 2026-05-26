@@ -32,9 +32,19 @@ document.addEventListener('click', e => {
     e.target.classList.add('active');
     const panel = document.getElementById(e.target.dataset.tab);
     panel.classList.add('active');
-    if (e.target.dataset.tab === 'myAppointments') loadMyAppointments();
-    if (e.target.dataset.tab === 'myHistory')      loadMyHistory();
-    if (e.target.dataset.tab === 'docAgenda')      loadDoctorAgenda();
+    if (e.target.dataset.tab === 'myAppointments')   loadMyAppointments();
+    if (e.target.dataset.tab === 'myHistory')        loadMyHistory();
+    if (e.target.dataset.tab === 'docAgenda')        loadDoctorAgenda();
+    if (e.target.dataset.tab === 'myPrescriptions')  loadMyPrescriptions();
+    if (e.target.dataset.tab === 'docPrescriptions') loadDoctorPrescriptions();
+  }
+  // Side tabs en sala video
+  if (e.target.classList.contains('side-tab')) {
+    document.querySelectorAll('.side-tab').forEach(t => t.classList.remove('active'));
+    document.querySelectorAll('.side-panel').forEach(p => p.classList.remove('active'));
+    e.target.classList.add('active');
+    document.getElementById(e.target.dataset.side).classList.add('active');
+    if (e.target.dataset.side === 'sideRx') loadPharmaciesForRx();
   }
 });
 
@@ -377,6 +387,182 @@ async function saveConsultation() {
     });
     alert('✓ Notas guardadas en HCE');
   } catch (e) { alert(e.message); }
+}
+
+// ============================================================
+// ===== MVP 2: RECETAS DIGITALES + LAB =====
+// ============================================================
+
+// ----- Recetas: paciente -----
+async function loadMyPrescriptions() {
+  try {
+    const list = await api(`/prescriptions?patient_id=${USER.external_ref_id}`);
+    renderPrescriptions(list, 'prescriptionsList', /*isDoctor*/ false);
+  } catch (e) { document.getElementById('prescriptionsList').innerHTML = `<p class="msg err">${e.message}</p>`; }
+}
+
+async function loadDoctorPrescriptions() {
+  try {
+    const list = await api(`/prescriptions?doctor_id=${USER.external_ref_id}`);
+    renderPrescriptions(list, 'docPrescriptionsList', /*isDoctor*/ true);
+  } catch (e) { document.getElementById('docPrescriptionsList').innerHTML = `<p class="msg err">${e.message}</p>`; }
+}
+
+async function renderPrescriptions(list, containerId, isDoctor) {
+  const container = document.getElementById(containerId);
+  if (!list.length) { container.innerHTML = '<p class="muted">No hay recetas.</p>'; return; }
+
+  // Carga farmacias para selector de envío (si paciente)
+  let pharmaciesHtml = '';
+  if (!isDoctor) {
+    try {
+      const pharms = await api('/pharmacies');
+      pharmaciesHtml = pharms.map(p => `<option value="${p.id}">${p.name} — ${p.city || p.region}</option>`).join('');
+    } catch {}
+  }
+
+  const html = await Promise.all(list.map(async p => {
+    const detail = await api(`/prescriptions/${p.id}`);
+    const verify = await api(`/prescriptions/${p.id}/verify`).catch(() => ({ valid: false }));
+    const items = detail.items || [];
+    return `
+      <div class="rx-card">
+        <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:6px">
+          <div>
+            <h4>Receta <span class="folio">${detail.folio}</span></h4>
+            <div class="meta">${new Date(detail.issued_at).toLocaleString()} • Vence: ${new Date(detail.expires_at).toLocaleDateString()}</div>
+          </div>
+          <div style="display:flex;gap:6px;flex-direction:column;align-items:flex-end">
+            <span class="status ${detail.status}">${detail.status}</span>
+            ${verify.valid ? '<span class="badge-verified">✓ Firma válida</span>' : '<span class="badge-invalid">✗ Firma inválida</span>'}
+          </div>
+        </div>
+        <div class="meta"><strong>Paciente:</strong> ${detail.patient_name} (DNI ${detail.patient_dni})</div>
+        <div class="meta"><strong>Médico:</strong> ${detail.doctor_name} — CMP ${detail.doctor_license}</div>
+        ${detail.diagnostico ? `<div class="meta"><strong>Dx:</strong> ${detail.diagnostico}</div>` : ''}
+        <div class="meds">
+          ${items.map(it => `<div class="med-line"><strong>${it.medication_name}</strong> — ${it.dosis}, cada ${it.frecuencia} por ${it.duracion} (${it.quantity}× ${it.via})</div>`).join('')}
+        </div>
+        <div class="signature">🔐 ${detail.signature_algorithm} • kid=${detail.public_key_id} • sig=${(detail.signature || '').substring(0,60)}...</div>
+        ${!isDoctor && ['EMITIDA','ENVIADA'].includes(detail.status) ? `
+          <div class="actions">
+            <select id="sendPharm-${detail.id}">${pharmaciesHtml}</select>
+            <button class="btn-primary" style="width:auto" onclick="sendRxToPharmacy('${detail.id}')">${detail.pharmacy_id ? 'Cambiar farmacia' : 'Enviar a farmacia'}</button>
+          </div>` : ''}
+      </div>`;
+  }));
+  container.innerHTML = html.join('');
+}
+
+async function sendRxToPharmacy(rxId) {
+  const select = document.getElementById(`sendPharm-${rxId}`);
+  const pharmacy_id = select.value;
+  if (!pharmacy_id) return alert('Selecciona una farmacia');
+  try {
+    await api(`/prescriptions/${rxId}/send-to-pharmacy`, { method: 'POST', body: JSON.stringify({ pharmacy_id }) });
+    alert(`✓ Receta enviada a la farmacia. Acércate con tu DNI.`);
+    loadMyPrescriptions();
+  } catch (e) { alert(e.message); }
+}
+
+// ----- Emisión de receta DESDE la sala de video -----
+let rxItemCounter = 0;
+function addRxItem() {
+  const idx = rxItemCounter++;
+  const div = document.createElement('div');
+  div.className = 'rx-item';
+  div.id = `rxItem-${idx}`;
+  div.innerHTML = `
+    <button class="rx-remove" onclick="document.getElementById('rxItem-${idx}').remove()">×</button>
+    <input class="rx-med" type="text" placeholder="Medicamento (ej: Paracetamol 500mg)" required>
+    <div class="row">
+      <input class="rx-dosis" type="text" placeholder="Dosis (1 tab)">
+      <input class="rx-frec"  type="text" placeholder="Frecuencia (8h)">
+    </div>
+    <div class="row">
+      <input class="rx-dur"  type="text" placeholder="Duración (5 días)">
+      <input class="rx-qty"  type="number" min="1" value="10" placeholder="Cantidad">
+    </div>`;
+  document.getElementById('rxItems').appendChild(div);
+}
+
+async function loadPharmaciesForRx() {
+  try {
+    const pharms = await api('/pharmacies');
+    document.getElementById('rxPharmacy').innerHTML =
+      '<option value="">— Sin asignar —</option>' +
+      pharms.map(p => `<option value="${p.id}">${p.name} (${p.city || p.region})</option>`).join('');
+  } catch {}
+}
+
+async function issuePrescription() {
+  if (!currentSession) return alert('Solo desde una videoconsulta activa');
+  const msg = document.getElementById('rxMsg'); msg.className = 'msg'; msg.textContent = '';
+  const items = Array.from(document.querySelectorAll('#rxItems .rx-item')).map(el => ({
+    medication_name: el.querySelector('.rx-med').value.trim(),
+    dosis: el.querySelector('.rx-dosis').value.trim(),
+    frecuencia: el.querySelector('.rx-frec').value.trim(),
+    duracion: el.querySelector('.rx-dur').value.trim(),
+    quantity: parseInt(el.querySelector('.rx-qty').value, 10) || 1,
+  })).filter(i => i.medication_name);
+  if (items.length === 0) { msg.className = 'msg err'; msg.textContent = 'Agrega al menos un medicamento'; return; }
+  try {
+    const r = await api('/prescriptions', {
+      method: 'POST',
+      body: JSON.stringify({
+        patient_id: currentSession.patientId,
+        doctor_id: currentSession.doctorId,
+        appointment_id: currentSession.appointmentId,
+        pharmacy_id: document.getElementById('rxPharmacy').value || null,
+        diagnostico: document.getElementById('rxDiagnostico').value,
+        items,
+      })
+    });
+    msg.className = 'msg ok';
+    msg.textContent = `✓ Receta ${r.folio} firmada y emitida${r.pharmacy_id ? ' y enviada a la farmacia' : ''}.`;
+    document.getElementById('rxItems').innerHTML = '';
+    document.getElementById('rxDiagnostico').value = '';
+  } catch (e) { msg.className = 'msg err'; msg.textContent = e.message; }
+}
+
+// ----- Solicitar orden de laboratorio -----
+let labTestCounter = 0;
+function addLabTest() {
+  const idx = labTestCounter++;
+  const div = document.createElement('div');
+  div.className = 'lab-item';
+  div.id = `labTest-${idx}`;
+  div.innerHTML = `
+    <button class="rx-remove" onclick="document.getElementById('labTest-${idx}').remove()">×</button>
+    <input class="lab-code" type="text" placeholder="Código (ej: GLU)" style="width:30%;display:inline-block">
+    <input class="lab-name" type="text" placeholder="Nombre (ej: Glucosa basal)" style="width:65%;display:inline-block;margin-left:4%">`;
+  document.getElementById('labTests').appendChild(div);
+}
+
+async function createLabOrder() {
+  if (!currentSession) return alert('Solo desde una videoconsulta activa');
+  const msg = document.getElementById('labMsg'); msg.className = 'msg'; msg.textContent = '';
+  const tests = Array.from(document.querySelectorAll('#labTests .lab-item')).map(el => ({
+    code: el.querySelector('.lab-code').value.trim(),
+    name: el.querySelector('.lab-name').value.trim(),
+    sample_type: 'sangre',
+  })).filter(t => t.name);
+  if (tests.length === 0) { msg.className = 'msg err'; msg.textContent = 'Agrega al menos un examen'; return; }
+  try {
+    const r = await api('/lab-orders', {
+      method: 'POST',
+      body: JSON.stringify({
+        patientId: currentSession.patientId,
+        doctorId: currentSession.doctorId,
+        appointmentId: currentSession.appointmentId,
+        preferred_lab: document.getElementById('labPreferred').value,
+        tests,
+      })
+    });
+    msg.className = 'msg ok';
+    msg.textContent = `✓ Orden ${String(r._id).substring(0,8)} creada. El paciente puede ir al laboratorio.`;
+    document.getElementById('labTests').innerHTML = '';
+  } catch (e) { msg.className = 'msg err'; msg.textContent = e.message; }
 }
 
 // ===== INIT =====

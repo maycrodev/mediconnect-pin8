@@ -9,3 +9,5 @@
 | 005 | [Cifrado AES-256-GCM para grabaciones](ADR-005-aes-256-gcm-recordings.md) | Aceptado |
 | 006 | [Integración solo-lectura COBOL (ACL)](ADR-006-cobol-integration.md) | Aceptado |
 | 007 | [API Gateway + JWT](ADR-007-api-gateway-jwt.md) | Aceptado |
+| 008 | [Firma RSA-2048/SHA-256 para recetas](ADR-008-rsa-prescription-signing.md) | Aceptado (MVP 2) |
+| 009 | [Webhook + API key para laboratorios](ADR-009-laboratory-webhook-api-key.md) | Aceptado (MVP 2) |

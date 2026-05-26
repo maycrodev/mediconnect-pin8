@@ -24,6 +24,9 @@ app.get('/services/status', async (req, res) => {
     appointment: process.env.APPOINTMENT_SERVICE_URL,
     medical_history: process.env.MEDICAL_HISTORY_SERVICE_URL,
     video: process.env.VIDEO_SERVICE_URL,
+    prescription: process.env.PRESCRIPTION_SERVICE_URL,
+    pharmacy: process.env.PHARMACY_SERVICE_URL,
+    laboratory: process.env.LABORATORY_SERVICE_URL,
   };
   const status = {};
   await Promise.all(Object.entries(services).map(async ([name, url]) => {
@@ -70,12 +73,18 @@ app.use(gateAuth);
 
 // === Proxies con pathFilter (sin mount path -> req.url se preserva intacto) ===
 const proxies = [
-  ['/api/auth',         process.env.AUTH_SERVICE_URL,            '/auth'],
-  ['/api/patients',     process.env.PATIENT_SERVICE_URL,         '/patients'],
-  ['/api/doctors',      process.env.DOCTOR_SERVICE_URL,          '/doctors'],
-  ['/api/appointments', process.env.APPOINTMENT_SERVICE_URL,     '/appointments'],
-  ['/api/history',      process.env.MEDICAL_HISTORY_SERVICE_URL, '/history'],
-  ['/api/sessions',     process.env.VIDEO_SERVICE_URL,           '/sessions'],
+  ['/api/auth',           process.env.AUTH_SERVICE_URL,            '/auth'],
+  ['/api/patients',       process.env.PATIENT_SERVICE_URL,         '/patients'],
+  ['/api/doctors',        process.env.DOCTOR_SERVICE_URL,          '/doctors'],
+  ['/api/appointments',   process.env.APPOINTMENT_SERVICE_URL,     '/appointments'],
+  ['/api/history',        process.env.MEDICAL_HISTORY_SERVICE_URL, '/history'],
+  ['/api/sessions',       process.env.VIDEO_SERVICE_URL,           '/sessions'],
+  // MVP 2
+  ['/api/prescriptions',  process.env.PRESCRIPTION_SERVICE_URL,    '/prescriptions'],
+  ['/api/pharmacies',     process.env.PHARMACY_SERVICE_URL,        '/pharmacies'],
+  ['/api/deliveries',     process.env.PHARMACY_SERVICE_URL,        '/deliveries'],
+  ['/api/lab-orders',     process.env.LABORATORY_SERVICE_URL,      '/orders'],
+  ['/api/lab-results',    process.env.LABORATORY_SERVICE_URL,      '/results'],
 ];
 for (const [prefix, target, targetPrefix] of proxies) {
   const re = new RegExp(`^${prefix.replace(/\//g, '\\/')}`);
