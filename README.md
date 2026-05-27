@@ -20,6 +20,14 @@
 | IV  | Recetas digitales con firma electrónica + envío a farmacia | `prescription-service` (RSA-2048/SHA-256) + `pharmacy-service` |
 | V   | Recepción automática de resultados de laboratorios externos | `laboratory-service` (webhook + API key + worker validador) |
 
+### MVP 3 (80%) — Funcionales VI, VII, VIII
+
+| Req | Descripción | Implementación |
+|-----|-------------|----------------|
+| VI   | Seguimiento IoT de pacientes crónicos | `iot-service` (MongoDB Time-Series) |
+| VII  | Alertas automáticas por valores fuera de rango | `alert-service` (CEP streaming sobre `iot.metric.received`) |
+| VIII | Calificación de atención y agregación por médico | `rating-service` (PostgreSQL + gating contra appointment + proyección al doctor-service) |
+
 Complementa con: **api-gateway**, **auth-service**, **patient-service**, **doctor-service**.
 
 ## Arquitectura
@@ -52,7 +60,10 @@ mediconnect-pin8/
 │   ├── videoconsultation-service/   # 3006 - MongoDB + AES-256
 │   ├── prescription-service/        # 3007 - PostgreSQL + RSA-2048
 │   ├── pharmacy-service/            # 3008 - PostgreSQL
-│   └── laboratory-service/          # 3009 - MongoDB + API key
+│   ├── laboratory-service/          # 3009 - MongoDB + API key
+│   ├── iot-service/                 # 3010 - MongoDB Time-Series
+│   ├── alert-service/               # 3011 - MongoDB + CEP
+│   └── rating-service/              # 3012 - PostgreSQL + Outbox
 ├── frontend/                         # SPA HTML/JS sirve en :8080
 └── docs/                             # C4, ADRs, secuencia, despliegue
 ```
@@ -91,6 +102,29 @@ Servicios disponibles tras ~30s:
 
 - [HU MVP 1](docs/historias-de-usuario.md) (HU-01 a HU-07)
 - [HU MVP 2](docs/historias-de-usuario-mvp2.md) (HU-08 a HU-14)
+- [HU MVP 3](docs/historias-de-usuario-mvp3.md) (HU-15 a HU-21)
+
+## Flujo de prueba MVP 3
+
+1. Login como **paciente1@mc.com** → tab **Mi Salud IoT**.
+2. Simula glucemia ALTA: campo `mg/dL` = `220` → **Simular** → genera alerta CRITICAL.
+3. Simula presión: 165/105 → genera alerta CRITICAL doble.
+4. Logout → login como **medico1@mc.com** → tab **Alertas IoT** → ver alertas activas → **Resolver**.
+5. (Si tienes una cita COMPLETADA del MVP 1) login paciente → **Mis Citas** → botón **Calificar** → 5★ → check `rating-service`.
+6. Login médico → tab **Mis Calificaciones** → ver promedio actualizado.
+
+### Verificación rápida vía curl (alerta IoT)
+
+```bash
+# Glucosa peligrosamente alta (DEBE disparar alerta CRITICAL)
+curl -X POST http://localhost:3010/metrics \
+  -H "Content-Type: application/json" \
+  -H "x-device-key: dev-glucometer-2026" \
+  -d '{"patientId":"11111111-1111-1111-1111-111111111111","deviceId":"glu-001","values":{"glucose":225}}'
+
+# Ver alerta generada
+curl http://localhost:3011/alerts?patientId=11111111-1111-1111-1111-111111111111
+```
 
 ## Flujo de prueba MVP 2
 

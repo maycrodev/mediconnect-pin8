@@ -133,6 +133,50 @@ services:
     networks:
       - mediconnect-net
 
+  # ============ MVP 3: DBs adicionales ============
+  mongo-iot:
+    image: mongo:6
+    container_name: mc-mongo-iot
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: mediconnect
+      MONGO_INITDB_ROOT_PASSWORD: mediconnect123
+      MONGO_INITDB_DATABASE: iot_db
+    ports:
+      - "27020:27017"
+    volumes:
+      - mongo_iot_data:/data/db
+    networks:
+      - mediconnect-net
+
+  mongo-alert:
+    image: mongo:6
+    container_name: mc-mongo-alert
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: mediconnect
+      MONGO_INITDB_ROOT_PASSWORD: mediconnect123
+      MONGO_INITDB_DATABASE: alert_db
+    ports:
+      - "27021:27017"
+    volumes:
+      - mongo_alert_data:/data/db
+    networks:
+      - mediconnect-net
+
+  postgres-rating:
+    image: postgres:15-alpine
+    container_name: mc-postgres-rating
+    environment:
+      POSTGRES_USER: mediconnect
+      POSTGRES_PASSWORD: mediconnect123
+      POSTGRES_DB: rating_db
+    ports:
+      - "5439:5432"
+    volumes:
+      - pg_rating_data:/var/lib/postgresql/data
+      - ./infrastructure/init-scripts/rating.sql:/docker-entrypoint-initdb.d/init.sql
+    networks:
+      - mediconnect-net
+
   redis:
     image: redis:7-alpine
     container_name: mc-redis
@@ -324,6 +368,58 @@ services:
     networks:
       - mediconnect-net
 
+  # ============ MVP 3: Microservicios ============
+  iot-service:
+    build: ./services/iot-service
+    container_name: mc-iot-service
+    ports:
+      - "3010:3010"
+    environment:
+      PORT: 3010
+      MONGO_URI: mongodb://mediconnect:mediconnect123@mongo-iot:27017/iot_db?authSource=admin
+      RABBITMQ_URL: amqp://mediconnect:mediconnect123@rabbitmq:5672
+      IOT_DEVICE_KEYS: "dev-glucometer-2026,dev-bp-monitor-2026,dev-oximeter-2026"
+    depends_on:
+      - mongo-iot
+      - rabbitmq
+    networks:
+      - mediconnect-net
+
+  alert-service:
+    build: ./services/alert-service
+    container_name: mc-alert-service
+    ports:
+      - "3011:3011"
+    environment:
+      PORT: 3011
+      MONGO_URI: mongodb://mediconnect:mediconnect123@mongo-alert:27017/alert_db?authSource=admin
+      RABBITMQ_URL: amqp://mediconnect:mediconnect123@rabbitmq:5672
+    depends_on:
+      - mongo-alert
+      - rabbitmq
+    networks:
+      - mediconnect-net
+
+  rating-service:
+    build: ./services/rating-service
+    container_name: mc-rating-service
+    ports:
+      - "3012:3012"
+    environment:
+      PORT: 3012
+      DB_HOST: postgres-rating
+      DB_PORT: 5432
+      DB_USER: mediconnect
+      DB_PASS: mediconnect123
+      DB_NAME: rating_db
+      RABBITMQ_URL: amqp://mediconnect:mediconnect123@rabbitmq:5672
+      APPOINTMENT_SERVICE_URL: http://appointment-service:3004
+    depends_on:
+      - postgres-rating
+      - rabbitmq
+    networks:
+      - mediconnect-net
+
   api-gateway:
     build: ./services/api-gateway
     container_name: mc-api-gateway
@@ -341,6 +437,9 @@ services:
       PRESCRIPTION_SERVICE_URL: http://prescription-service:3007
       PHARMACY_SERVICE_URL: http://pharmacy-service:3008
       LABORATORY_SERVICE_URL: http://laboratory-service:3009
+      IOT_SERVICE_URL: http://iot-service:3010
+      ALERT_SERVICE_URL: http://alert-service:3011
+      RATING_SERVICE_URL: http://rating-service:3012
     depends_on:
       - auth-service
       - patient-service
@@ -351,6 +450,9 @@ services:
       - prescription-service
       - pharmacy-service
       - laboratory-service
+      - iot-service
+      - alert-service
+      - rating-service
     networks:
       - mediconnect-net
 
@@ -375,6 +477,9 @@ volumes:
   pg_appointment_data:
   pg_prescription_data:
   pg_pharmacy_data:
+  pg_rating_data:
   mongo_history_data:
   mongo_video_data:
   mongo_lab_data:
+  mongo_iot_data:
+  mongo_alert_data:

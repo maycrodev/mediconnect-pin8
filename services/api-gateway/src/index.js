@@ -27,6 +27,9 @@ app.get('/services/status', async (req, res) => {
     prescription: process.env.PRESCRIPTION_SERVICE_URL,
     pharmacy: process.env.PHARMACY_SERVICE_URL,
     laboratory: process.env.LABORATORY_SERVICE_URL,
+    iot: process.env.IOT_SERVICE_URL,
+    alert: process.env.ALERT_SERVICE_URL,
+    rating: process.env.RATING_SERVICE_URL,
   };
   const status = {};
   await Promise.all(Object.entries(services).map(async ([name, url]) => {
@@ -85,6 +88,12 @@ const proxies = [
   ['/api/deliveries',     process.env.PHARMACY_SERVICE_URL,        '/deliveries'],
   ['/api/lab-orders',     process.env.LABORATORY_SERVICE_URL,      '/orders'],
   ['/api/lab-results',    process.env.LABORATORY_SERVICE_URL,      '/results'],
+  // MVP 3
+  ['/api/iot/patients',   process.env.IOT_SERVICE_URL,             '/patients'],
+  ['/api/iot/metrics',    process.env.IOT_SERVICE_URL,             '/metrics'],
+  ['/api/rules',          process.env.ALERT_SERVICE_URL,           '/rules'],
+  ['/api/alerts',         process.env.ALERT_SERVICE_URL,           '/alerts'],
+  ['/api/ratings',        process.env.RATING_SERVICE_URL,          '/ratings'],
 ];
 for (const [prefix, target, targetPrefix] of proxies) {
   const re = new RegExp(`^${prefix.replace(/\//g, '\\/')}`);

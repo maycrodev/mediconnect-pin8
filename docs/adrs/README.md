@@ -11,3 +11,6 @@
 | 007 | [API Gateway + JWT](ADR-007-api-gateway-jwt.md) | Aceptado |
 | 008 | [Firma RSA-2048/SHA-256 para recetas](ADR-008-rsa-prescription-signing.md) | Aceptado (MVP 2) |
 | 009 | [Webhook + API key para laboratorios](ADR-009-laboratory-webhook-api-key.md) | Aceptado (MVP 2) |
+| 010 | [MongoDB Time-Series para IoT](ADR-010-mongodb-timeseries-iot.md) | Aceptado (MVP 3) |
+| 011 | [CEP en streaming para alertas](ADR-011-cep-alert-streaming.md) | Aceptado (MVP 3) |
+| 012 | [Gating + proyección de ratings](ADR-012-rating-gating-and-projection.md) | Aceptado (MVP 3) |

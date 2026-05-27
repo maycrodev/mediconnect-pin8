@@ -37,6 +37,9 @@ document.addEventListener('click', e => {
     if (e.target.dataset.tab === 'docAgenda')        loadDoctorAgenda();
     if (e.target.dataset.tab === 'myPrescriptions')  loadMyPrescriptions();
     if (e.target.dataset.tab === 'docPrescriptions') loadDoctorPrescriptions();
+    if (e.target.dataset.tab === 'myIoT')            loadMyIoT();
+    if (e.target.dataset.tab === 'docAlerts')        loadDoctorAlerts();
+    if (e.target.dataset.tab === 'docRatings')       loadDoctorRatings();
   }
   // Side tabs en sala video
   if (e.target.classList.contains('side-tab')) {
@@ -189,6 +192,8 @@ async function renderAppointments(apps, containerId, isPatient) {
             ? `<button class="primary" onclick="rejoinVideo('${a.id}','${a.patient_id}','${a.doctor_id}')">Volver a sala</button>` : ''}
           ${['AGENDADA','CONFIRMADA'].includes(a.status)
             ? `<button class="danger" onclick="cancelAppt('${a.id}')">Cancelar</button>` : ''}
+          ${isPatient && a.status === 'COMPLETADA'
+            ? `<button class="primary" onclick="openRatingModal('${a.id}','${a.doctor_id}')">Calificar</button>` : ''}
         </div>
       </div>
     </div>`).join('');
@@ -563,6 +568,229 @@ async function createLabOrder() {
     msg.textContent = `✓ Orden ${String(r._id).substring(0,8)} creada. El paciente puede ir al laboratorio.`;
     document.getElementById('labTests').innerHTML = '';
   } catch (e) { msg.className = 'msg err'; msg.textContent = e.message; }
+}
+
+// ============================================================
+// ===== MVP 3: IoT + Alertas + Calificaciones =====
+// ============================================================
+
+// --- Device keys públicas para el simulador del paciente ---
+const DEVICE_KEYS = {
+  glucometer: 'dev-glucometer-2026',
+  bp_monitor: 'dev-bp-monitor-2026',
+  oximeter:   'dev-oximeter-2026',
+};
+
+async function simulateMetric(deviceType, values) {
+  const headers = { 'Content-Type': 'application/json', 'x-device-key': DEVICE_KEYS[deviceType] };
+  if (TOKEN) headers['Authorization'] = `Bearer ${TOKEN}`;
+  try {
+    const res = await fetch(API + '/iot/metrics', {
+      method: 'POST', headers,
+      body: JSON.stringify({
+        patientId: USER.external_ref_id,
+        deviceId: `sim-${deviceType}-001`,
+        values,
+      })
+    });
+    if (!res.ok) {
+      const t = await res.text();
+      throw new Error(t);
+    }
+    setTimeout(loadMyIoT, 600);  // refresca para que aparezca la lectura + alerta
+  } catch (e) { alert('Error enviando métrica: ' + e.message); }
+}
+
+async function loadMyIoT() {
+  try {
+    const summary = await api(`/iot/patients/${USER.external_ref_id}/summary`);
+    renderIoTCards(summary.devices);
+    // Alertas del paciente
+    const alerts = await api(`/alerts?patientId=${USER.external_ref_id}&status=ABIERTA`);
+    renderMyAlerts(alerts);
+    // Últimas mediciones (todas)
+    const last = await api(`/iot/patients/${USER.external_ref_id}/metrics?limit=15`);
+    renderMyMetrics(last);
+  } catch (e) { console.error(e); }
+}
+
+function renderIoTCards(devices) {
+  const fmt = (ts) => new Date(ts).toLocaleTimeString();
+  const g = devices.glucometer, b = devices.bp_monitor, o = devices.oximeter;
+  if (g) {
+    document.getElementById('iotGlucoseLast').textContent = `${g.latest.values.glucose} mg/dL`;
+    document.getElementById('iotGlucoseMeta').textContent = `Última: ${fmt(g.latest.ts)} • ${g.count_24h} mediciones 24h`;
+  } else { document.getElementById('iotGlucoseLast').textContent = '—'; document.getElementById('iotGlucoseMeta').textContent = 'Sin lecturas'; }
+  if (b) {
+    document.getElementById('iotBPLast').textContent = `${b.latest.values.systolic}/${b.latest.values.diastolic}`;
+    document.getElementById('iotBPMeta').textContent = `Última: ${fmt(b.latest.ts)} • ${b.count_24h} mediciones 24h`;
+  } else { document.getElementById('iotBPLast').textContent = '—'; document.getElementById('iotBPMeta').textContent = 'Sin lecturas'; }
+  if (o) {
+    document.getElementById('iotSpO2Last').textContent = `${o.latest.values.spo2}% • ${o.latest.values.heartRate} lpm`;
+    document.getElementById('iotSpO2Meta').textContent = `Última: ${fmt(o.latest.ts)} • ${o.count_24h} mediciones 24h`;
+  } else { document.getElementById('iotSpO2Last').textContent = '—'; document.getElementById('iotSpO2Meta').textContent = 'Sin lecturas'; }
+}
+
+function renderMyAlerts(alerts) {
+  const c = document.getElementById('myAlertsList');
+  if (!alerts.length) { c.innerHTML = '<p class="muted">No tienes alertas activas.</p>'; return; }
+  c.innerHTML = alerts.map(a => `
+    <div class="alert-card ${a.severity}">
+      <div>
+        <span class="sev">${a.severity}</span>
+        <strong>${a.description}</strong>
+        <div class="meta">Valor: ${a.value} (${a.comparator} ${a.threshold}) — ${new Date(a.triggered_at).toLocaleString()}</div>
+      </div>
+    </div>`).join('');
+}
+
+function renderMyMetrics(metrics) {
+  const c = document.getElementById('iotMetricsList');
+  if (!metrics.length) { c.innerHTML = '<p class="muted">Sin lecturas registradas todavía.</p>'; return; }
+  c.innerHTML = metrics.map(m => `
+    <div class="metric-row">
+      <div>
+        <strong>${m.meta.deviceType}</strong>
+        <span class="vals"> · ${Object.entries(m.values).map(([k,v]) => `${k}=${v}`).join(' · ')}</span>
+      </div>
+      <div class="ts">${new Date(m.ts).toLocaleString()}</div>
+    </div>`).join('');
+}
+
+// --- Médico: alertas ---
+async function loadDoctorAlerts() {
+  try {
+    const sev = document.getElementById('alertSeverity').value;
+    const st = document.getElementById('alertStatus').value;
+    const params = new URLSearchParams();
+    if (sev) params.set('severity', sev);
+    if (st)  params.set('status', st);
+    const alerts = await api('/alerts' + (params.toString() ? '?' + params : ''));
+    const c = document.getElementById('docAlertsList');
+    if (!alerts.length) { c.innerHTML = '<p class="muted">No hay alertas con esos filtros.</p>'; return; }
+    // Enriquecer con datos del paciente
+    const cache = {};
+    for (const a of alerts) {
+      if (!cache[a.patientId]) {
+        try { cache[a.patientId] = await api(`/patients/${a.patientId}`); } catch {}
+      }
+      a._patient = cache[a.patientId];
+    }
+    c.innerHTML = alerts.map(a => `
+      <div class="alert-card ${a.severity}">
+        <div>
+          <span class="sev">${a.severity}</span>
+          <strong>${a.description}</strong>
+          <div class="meta">Paciente: ${a._patient?.first_name || 'N/A'} ${a._patient?.last_name || ''} ${a._patient?.dni ? '(DNI '+a._patient.dni+')' : ''}</div>
+          <div class="meta">Valor: <b>${a.value}</b> ${a.comparator} ${a.threshold} • ${a.deviceType} • ${new Date(a.triggered_at).toLocaleString()}</div>
+          <div class="meta">Estado: <b>${a.status}</b>${a.acknowledged_by ? ' por ' + a.acknowledged_by : ''}</div>
+        </div>
+        <div class="actions">
+          ${a.status === 'ABIERTA' ? `<button onclick="ackAlert('${a._id}')">Reconocer</button>` : ''}
+          ${a.status !== 'RESUELTA' ? `<button class="primary" onclick="resolveAlert('${a._id}')">Resolver</button>` : ''}
+        </div>
+      </div>`).join('');
+  } catch (e) { document.getElementById('docAlertsList').innerHTML = `<p class="msg err">${e.message}</p>`; }
+}
+
+async function ackAlert(id) {
+  try { await api(`/alerts/${id}/acknowledge`, { method: 'POST', body: JSON.stringify({ by: USER.email }) }); loadDoctorAlerts(); }
+  catch (e) { alert(e.message); }
+}
+async function resolveAlert(id) {
+  const notes = prompt('Notas de resolución (opcional):');
+  try { await api(`/alerts/${id}/resolve`, { method: 'POST', body: JSON.stringify({ notes }) }); loadDoctorAlerts(); }
+  catch (e) { alert(e.message); }
+}
+
+// --- Médico: calificaciones ---
+async function loadDoctorRatings() {
+  try {
+    const summary = await api(`/ratings/doctor/${USER.external_ref_id}/summary`);
+    document.getElementById('docRatingsSummary').innerHTML = `
+      <div><strong>${Number(summary.avg_stars || 0).toFixed(2)}</strong><small>Promedio ★</small></div>
+      <div><strong>${summary.total_ratings || 0}</strong><small>Total reseñas</small></div>
+      <div><strong>${Number(summary.avg_puntualidad || 0).toFixed(2)}</strong><small>Puntualidad</small></div>
+      <div><strong>${Number(summary.avg_empatia || 0).toFixed(2)}</strong><small>Empatía</small></div>`;
+    const list = await api(`/ratings?doctor_id=${USER.external_ref_id}`);
+    const c = document.getElementById('docRatingsList');
+    c.innerHTML = list.length
+      ? list.map(r => `
+          <div class="rating-card">
+            <div class="stars-shown">${'★'.repeat(r.stars)}${'☆'.repeat(5-r.stars)}</div>
+            <div class="meta">${new Date(r.created_at).toLocaleString()} • cita ${r.appointment_id.substring(0,8)}</div>
+            ${r.comment ? `<div style="margin-top:6px">${r.comment}</div>` : ''}
+          </div>`).join('')
+      : '<p class="muted">Aún no tienes calificaciones.</p>';
+  } catch (e) { document.getElementById('docRatingsList').innerHTML = `<p class="msg err">${e.message}</p>`; }
+}
+
+// --- Modal de calificación (paciente) ---
+let ratingState = { stars: 0, p: 0, e: 0, c: 0 };
+function openRatingModal(appointmentId, doctorId) {
+  ratingState = { stars: 0, p: 0, e: 0, c: 0 };
+  const modal = document.createElement('div');
+  modal.className = 'modal-bg';
+  modal.innerHTML = `
+    <div class="modal">
+      <h3>Calificar consulta</h3>
+      <p class="muted">Tu opinión ayuda a mejorar el servicio.</p>
+      <div style="margin:10px 0">
+        <div class="rating-stars" data-dim="stars">
+          ${[1,2,3,4,5].map(n => `<span class="star" data-v="${n}">★</span>`).join('')}
+        </div>
+      </div>
+      <div class="sub">
+        <label>Puntualidad</label>
+        <div class="rating-stars" data-dim="p">${[1,2,3,4,5].map(n=>`<span class="star" data-v="${n}">★</span>`).join('')}</div>
+      </div>
+      <div class="sub">
+        <label>Empatía</label>
+        <div class="rating-stars" data-dim="e">${[1,2,3,4,5].map(n=>`<span class="star" data-v="${n}">★</span>`).join('')}</div>
+      </div>
+      <div class="sub">
+        <label>Claridad</label>
+        <div class="rating-stars" data-dim="c">${[1,2,3,4,5].map(n=>`<span class="star" data-v="${n}">★</span>`).join('')}</div>
+      </div>
+      <textarea id="ratingComment" rows="3" placeholder="Comentario (opcional)"></textarea>
+      <div style="display:flex;gap:8px;margin-top:12px">
+        <button class="btn-secondary" onclick="this.closest('.modal-bg').remove()">Cancelar</button>
+        <button class="btn-primary" onclick="submitRating('${appointmentId}')">Enviar calificación</button>
+      </div>
+      <div id="ratingMsg" class="msg"></div>
+    </div>`;
+  document.body.appendChild(modal);
+  modal.querySelectorAll('.rating-stars').forEach(group => {
+    group.addEventListener('click', evt => {
+      if (!evt.target.classList.contains('star')) return;
+      const v = parseInt(evt.target.dataset.v);
+      const dim = group.dataset.dim;
+      ratingState[dim] = v;
+      group.querySelectorAll('.star').forEach((s,i) => s.classList.toggle('active', i < v));
+    });
+  });
+}
+
+async function submitRating(appointmentId) {
+  if (ratingState.stars < 1) { document.getElementById('ratingMsg').className='msg err'; document.getElementById('ratingMsg').textContent='Selecciona al menos 1 estrella'; return; }
+  try {
+    await api('/ratings', {
+      method: 'POST',
+      body: JSON.stringify({
+        appointment_id: appointmentId,
+        stars: ratingState.stars,
+        puntualidad: ratingState.p || null,
+        empatia: ratingState.e || null,
+        claridad: ratingState.c || null,
+        comment: document.getElementById('ratingComment').value || null,
+      })
+    });
+    document.querySelector('.modal-bg').remove();
+    alert('✓ Gracias por tu calificación');
+  } catch (e) {
+    document.getElementById('ratingMsg').className = 'msg err';
+    document.getElementById('ratingMsg').textContent = e.message;
+  }
 }
 
 // ===== INIT =====

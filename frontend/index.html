@@ -53,6 +53,7 @@
       <button class="tab" data-tab="myAppointments">Mis Citas</button>
       <button class="tab" data-tab="myHistory">Mi Historial</button>
       <button class="tab" data-tab="myPrescriptions">Mis Recetas</button>
+      <button class="tab" data-tab="myIoT">Mi Salud IoT</button>
     </div>
 
     <div id="newAppointment" class="tab-panel active">
@@ -99,6 +100,49 @@
       <p class="muted">Todas las recetas tienen firma electrónica RSA-2048 con validez legal.</p>
       <div id="prescriptionsList" class="list"></div>
     </div>
+
+    <div id="myIoT" class="tab-panel">
+      <h3>Mi salud — Dispositivos IoT</h3>
+      <p class="muted">Tus mediciones llegan automáticamente desde glucómetro, tensiómetro y oxímetro. El sistema alerta al médico si algún valor sale de rango.</p>
+
+      <div class="iot-cards">
+        <div class="iot-card">
+          <h4>🩸 Glucosa</h4>
+          <div class="iot-value" id="iotGlucoseLast">—</div>
+          <div class="iot-meta" id="iotGlucoseMeta">Sin lecturas hoy</div>
+          <div class="iot-sim">
+            <input type="number" id="simGlucose" placeholder="mg/dL" value="105">
+            <button class="btn-secondary" onclick="simulateMetric('glucometer',{glucose:parseFloat(document.getElementById('simGlucose').value)})">Simular</button>
+          </div>
+        </div>
+        <div class="iot-card">
+          <h4>❤️ Presión arterial</h4>
+          <div class="iot-value" id="iotBPLast">—</div>
+          <div class="iot-meta" id="iotBPMeta">Sin lecturas hoy</div>
+          <div class="iot-sim">
+            <input type="number" id="simSys" placeholder="sist" value="125" style="width:48%">
+            <input type="number" id="simDia" placeholder="dia"  value="82" style="width:48%">
+            <button class="btn-secondary" onclick="simulateMetric('bp_monitor',{systolic:parseFloat(document.getElementById('simSys').value),diastolic:parseFloat(document.getElementById('simDia').value)})">Simular</button>
+          </div>
+        </div>
+        <div class="iot-card">
+          <h4>🫁 Saturación O₂</h4>
+          <div class="iot-value" id="iotSpO2Last">—</div>
+          <div class="iot-meta" id="iotSpO2Meta">Sin lecturas hoy</div>
+          <div class="iot-sim">
+            <input type="number" id="simSpo2" placeholder="%" value="97" style="width:48%">
+            <input type="number" id="simHR"   placeholder="lpm" value="78" style="width:48%">
+            <button class="btn-secondary" onclick="simulateMetric('oximeter',{spo2:parseFloat(document.getElementById('simSpo2').value),heartRate:parseFloat(document.getElementById('simHR').value)})">Simular</button>
+          </div>
+        </div>
+      </div>
+
+      <h4 style="margin-top:24px">Mis alertas activas</h4>
+      <div id="myAlertsList" class="list"></div>
+
+      <h4 style="margin-top:18px">Mis últimas mediciones</h4>
+      <div id="iotMetricsList" class="list"></div>
+    </div>
   </section>
 
   <!-- DASHBOARD MÉDICO -->
@@ -107,6 +151,8 @@
       <button class="tab active" data-tab="docAgenda">Agenda</button>
       <button class="tab" data-tab="docPatient">Buscar Paciente</button>
       <button class="tab" data-tab="docPrescriptions">Recetas Emitidas</button>
+      <button class="tab" data-tab="docAlerts">Alertas IoT</button>
+      <button class="tab" data-tab="docRatings">Mis Calificaciones</button>
     </div>
     <div id="docAgenda" class="tab-panel active">
       <h3>Mis citas agendadas</h3>
@@ -123,6 +169,32 @@
     <div id="docPrescriptions" class="tab-panel">
       <h3>Mis recetas emitidas</h3>
       <div id="docPrescriptionsList" class="list"></div>
+    </div>
+
+    <div id="docAlerts" class="tab-panel">
+      <h3>Alertas IoT de pacientes crónicos</h3>
+      <p class="muted">Disparadas automáticamente por valores fuera de rango. Reconoce o resuelve cada una.</p>
+      <div class="filter-row">
+        <select id="alertSeverity" onchange="loadDoctorAlerts()">
+          <option value="">Todas las severidades</option>
+          <option value="CRITICAL">CRITICAL</option>
+          <option value="WARNING">WARNING</option>
+        </select>
+        <select id="alertStatus" onchange="loadDoctorAlerts()">
+          <option value="ABIERTA">Solo ABIERTAS</option>
+          <option value="">Todas</option>
+          <option value="RECONOCIDA">RECONOCIDA</option>
+          <option value="RESUELTA">RESUELTA</option>
+        </select>
+      </div>
+      <div id="docAlertsList" class="list"></div>
+    </div>
+
+    <div id="docRatings" class="tab-panel">
+      <h3>Mis calificaciones</h3>
+      <div id="docRatingsSummary" class="hce-summary"></div>
+      <h4 style="margin:14px 0">Últimas calificaciones</h4>
+      <div id="docRatingsList" class="list"></div>
     </div>
   </section>
 

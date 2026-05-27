@@ -26,7 +26,27 @@ async function connectRabbit(retries = 10) {
       const conn = await amqp.connect(process.env.RABBITMQ_URL);
       rabbitChannel = await conn.createChannel();
       await rabbitChannel.assertExchange('mediconnect.events', 'topic', { durable: true });
-      console.log('[doctor] RabbitMQ connected');
+      // Suscripción: refrescar rating ante eventos del rating-service
+      const q = await rabbitChannel.assertQueue('doctor.events', { durable: true });
+      await rabbitChannel.bindQueue(q.queue, 'mediconnect.events', 'doctor.rating.updated');
+      await rabbitChannel.bindQueue(q.queue, 'mediconnect.events', 'appointment.completed');
+      rabbitChannel.consume(q.queue, async msg => {
+        try {
+          const data = JSON.parse(msg.content.toString());
+          const rk = msg.fields.routingKey;
+          if (rk === 'doctor.rating.updated' && data.doctor_id) {
+            await pool.query(
+              `UPDATE doctors SET rating=$1 WHERE id=$2`,
+              [data.avg_stars || 0, data.doctor_id]
+            );
+            console.log(`[doctor] rating actualizado ${data.doctor_id} → ${data.avg_stars}`);
+          } else if (rk === 'appointment.completed' && data.doctor_id) {
+            await pool.query(`UPDATE doctors SET total_consultations = total_consultations + 1 WHERE id=$1`, [data.doctor_id]);
+          }
+          rabbitChannel.ack(msg);
+        } catch (e) { rabbitChannel.nack(msg, false, false); }
+      });
+      console.log('[doctor] RabbitMQ connected + subscribed');
       return;
     } catch { await new Promise(r => setTimeout(r, 3000)); }
   }
