@@ -14,3 +14,4 @@
 | 010 | [MongoDB Time-Series para IoT](ADR-010-mongodb-timeseries-iot.md) | Aceptado (MVP 3) |
 | 011 | [CEP en streaming para alertas](ADR-011-cep-alert-streaming.md) | Aceptado (MVP 3) |
 | 012 | [Gating + proyección de ratings](ADR-012-rating-gating-and-projection.md) | Aceptado (MVP 3) |
+| 013 | [Audit log inmutable con hash chain](ADR-013-append-only-hash-chain.md) | Aceptado (MVP 4) |

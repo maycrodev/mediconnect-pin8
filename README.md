@@ -28,6 +28,12 @@
 | VII  | Alertas automáticas por valores fuera de rango | `alert-service` (CEP streaming sobre `iot.metric.received`) |
 | VIII | Calificación de atención y agregación por médico | `rating-service` (PostgreSQL + gating contra appointment + proyección al doctor-service) |
 
+### MVP 4 (100%) — Auditoría con registros inmutables
+
+| Req | Descripción | Implementación |
+|-----|-------------|----------------|
+| Ctx.b | Auditoría de HCE con registros inmutables y acceso regulatorio | `audit-service` (PostgreSQL append-only + hash chain SHA-256 + suscripción universal `#` al broker + dashboard auditor) |
+
 Complementa con: **api-gateway**, **auth-service**, **patient-service**, **doctor-service**.
 
 ## Arquitectura
@@ -63,7 +69,8 @@ mediconnect-pin8/
 │   ├── laboratory-service/          # 3009 - MongoDB + API key
 │   ├── iot-service/                 # 3010 - MongoDB Time-Series
 │   ├── alert-service/               # 3011 - MongoDB + CEP
-│   └── rating-service/              # 3012 - PostgreSQL + Outbox
+│   ├── rating-service/              # 3012 - PostgreSQL + Outbox
+│   └── audit-service/               # 3013 - PostgreSQL APPEND-ONLY + hash chain
 ├── frontend/                         # SPA HTML/JS sirve en :8080
 └── docs/                             # C4, ADRs, secuencia, despliegue
 ```
@@ -103,6 +110,16 @@ Servicios disponibles tras ~30s:
 - [HU MVP 1](docs/historias-de-usuario.md) (HU-01 a HU-07)
 - [HU MVP 2](docs/historias-de-usuario-mvp2.md) (HU-08 a HU-14)
 - [HU MVP 3](docs/historias-de-usuario-mvp3.md) (HU-15 a HU-21)
+- [HU MVP 4](docs/historias-de-usuario-mvp4.md) (HU-22 a HU-28)
+
+## Flujo de prueba MVP 4 (auditoría)
+
+1. Login como **auditor@mc.com** / `password123` → entra al **Dashboard de Auditor**.
+2. **Vista General**: ve totales, eventos por tipo, recursos por tipo.
+3. **Registros Inmutables**: tabla con todos los eventos del sistema, filtros.
+4. **Integridad**: click "Verificar ahora" → recorre toda la cadena → debe decir `✅ CADENA ÍNTEGRA`.
+5. En la misma tab: ingresa un `seq` cualquiera (ej. `1`) → click "Intentar UPDATE" → debe responder **bloqueado por trigger PostgreSQL**.
+6. **Auditoría por paciente**: ingresa `11111111-1111-1111-1111-111111111111` → timeline completo con citas, recetas, IoT, lab, accesos a HCE.
 
 ## Flujo de prueba MVP 3
 

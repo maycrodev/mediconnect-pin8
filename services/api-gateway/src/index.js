@@ -30,6 +30,7 @@ app.get('/services/status', async (req, res) => {
     iot: process.env.IOT_SERVICE_URL,
     alert: process.env.ALERT_SERVICE_URL,
     rating: process.env.RATING_SERVICE_URL,
+    audit: process.env.AUDIT_SERVICE_URL,
   };
   const status = {};
   await Promise.all(Object.entries(services).map(async ([name, url]) => {
@@ -74,6 +75,14 @@ function gateAuth(req, res, next) {
 }
 app.use(gateAuth);
 
+// === Guard adicional: las rutas /api/audit son solo AUDITOR / ADMIN ===
+app.use('/api/audit', (req, res, next) => {
+  if (!req.user) return res.status(401).json({ error: 'No autenticado' });
+  if (!['AUDITOR','ADMIN'].includes(req.user.role))
+    return res.status(403).json({ error: 'Solo AUDITOR puede acceder a registros de auditoría' });
+  next();
+});
+
 // === Proxies con pathFilter (sin mount path -> req.url se preserva intacto) ===
 const proxies = [
   ['/api/auth',           process.env.AUTH_SERVICE_URL,            '/auth'],
@@ -94,6 +103,8 @@ const proxies = [
   ['/api/rules',          process.env.ALERT_SERVICE_URL,           '/rules'],
   ['/api/alerts',         process.env.ALERT_SERVICE_URL,           '/alerts'],
   ['/api/ratings',        process.env.RATING_SERVICE_URL,          '/ratings'],
+  // MVP 4
+  ['/api/audit',          process.env.AUDIT_SERVICE_URL,           '/audit'],
 ];
 for (const [prefix, target, targetPrefix] of proxies) {
   const re = new RegExp(`^${prefix.replace(/\//g, '\\/')}`);

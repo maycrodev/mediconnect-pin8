@@ -190,10 +190,33 @@ async function connectRabbit(retries = 10) {
   }
 }
 
+function publishEvent(rk, p) {
+  if (!rabbitChannel) return;
+  rabbitChannel.publish('mediconnect.events', rk,
+    Buffer.from(JSON.stringify({ ...p, timestamp: new Date().toISOString() })), { persistent: true });
+}
+
+// Middleware: emite hce.accessed cuando un usuario lee un HCE
+function emitAccess(summary_only = false) {
+  return (req, res, next) => {
+    const patientId = req.params.patientId;
+    if (patientId) {
+      publishEvent('hce.accessed', {
+        patientId,
+        actor_id: req.headers['x-user-id'] || null,
+        actor_role: req.headers['x-user-role'] || 'UNKNOWN',
+        summary_only,
+        endpoint: req.path,
+      });
+    }
+    next();
+  };
+}
+
 app.get('/health', (req, res) => res.json({ status: 'UP', service: 'medical-history-service' }));
 
 // === Obtener HCE completo del paciente (req. III) ===
-app.get('/history/:patientId', async (req, res) => {
+app.get('/history/:patientId', emitAccess(false), async (req, res) => {
   try {
     let h = await MedicalHistory.findOne({ patientId: req.params.patientId });
     if (!h) {
@@ -205,7 +228,7 @@ app.get('/history/:patientId', async (req, res) => {
 });
 
 // === Resumen rápido (para dashboard <150ms req. no-funcional) ===
-app.get('/history/:patientId/summary', async (req, res) => {
+app.get('/history/:patientId/summary', emitAccess(true), async (req, res) => {
   try {
     const h = await MedicalHistory.findOne({ patientId: req.params.patientId }).lean();
     if (!h) return res.status(404).json({ error: 'HCE no encontrado' });

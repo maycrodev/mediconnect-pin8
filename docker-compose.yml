@@ -177,6 +177,22 @@ services:
     networks:
       - mediconnect-net
 
+  # ============ MVP 4: BD inmutable de auditoría ============
+  postgres-audit:
+    image: postgres:15-alpine
+    container_name: mc-postgres-audit
+    environment:
+      POSTGRES_USER: mediconnect
+      POSTGRES_PASSWORD: mediconnect123
+      POSTGRES_DB: audit_db
+    ports:
+      - "5440:5432"
+    volumes:
+      - pg_audit_data:/var/lib/postgresql/data
+      - ./infrastructure/init-scripts/audit.sql:/docker-entrypoint-initdb.d/init.sql
+    networks:
+      - mediconnect-net
+
   redis:
     image: redis:7-alpine
     container_name: mc-redis
@@ -420,6 +436,26 @@ services:
     networks:
       - mediconnect-net
 
+  # ============ MVP 4: Audit Service ============
+  audit-service:
+    build: ./services/audit-service
+    container_name: mc-audit-service
+    ports:
+      - "3013:3013"
+    environment:
+      PORT: 3013
+      DB_HOST: postgres-audit
+      DB_PORT: 5432
+      DB_USER: mediconnect
+      DB_PASS: mediconnect123
+      DB_NAME: audit_db
+      RABBITMQ_URL: amqp://mediconnect:mediconnect123@rabbitmq:5672
+    depends_on:
+      - postgres-audit
+      - rabbitmq
+    networks:
+      - mediconnect-net
+
   api-gateway:
     build: ./services/api-gateway
     container_name: mc-api-gateway
@@ -440,6 +476,7 @@ services:
       IOT_SERVICE_URL: http://iot-service:3010
       ALERT_SERVICE_URL: http://alert-service:3011
       RATING_SERVICE_URL: http://rating-service:3012
+      AUDIT_SERVICE_URL: http://audit-service:3013
     depends_on:
       - auth-service
       - patient-service
@@ -453,6 +490,7 @@ services:
       - iot-service
       - alert-service
       - rating-service
+      - audit-service
     networks:
       - mediconnect-net
 
@@ -478,6 +516,7 @@ volumes:
   pg_prescription_data:
   pg_pharmacy_data:
   pg_rating_data:
+  pg_audit_data:
   mongo_history_data:
   mongo_video_data:
   mongo_lab_data:

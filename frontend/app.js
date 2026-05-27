@@ -40,6 +40,10 @@ document.addEventListener('click', e => {
     if (e.target.dataset.tab === 'myIoT')            loadMyIoT();
     if (e.target.dataset.tab === 'docAlerts')        loadDoctorAlerts();
     if (e.target.dataset.tab === 'docRatings')       loadDoctorRatings();
+    if (e.target.dataset.tab === 'auditOverview')    loadAuditOverview();
+    if (e.target.dataset.tab === 'auditLog')         loadAuditLog();
+    if (e.target.dataset.tab === 'auditPatient')     {/* manual */}
+    if (e.target.dataset.tab === 'auditIntegrity')   {/* manual */}
   }
   // Side tabs en sala video
   if (e.target.classList.contains('side-tab')) {
@@ -79,6 +83,7 @@ function routeAfterLogin() {
   document.getElementById('userInfo').textContent = `${USER.email} (${USER.role})`;
   if (USER.role === 'PACIENTE') { show('patientDashboard'); loadDoctorsAndSpecialties(); }
   else if (USER.role === 'MEDICO') { show('doctorDashboard'); loadDoctorAgenda(); }
+  else if (USER.role === 'AUDITOR') { show('auditorDashboard'); loadAuditOverview(); }
   else { show('patientDashboard'); loadDoctorsAndSpecialties(); }
 }
 
@@ -790,6 +795,148 @@ async function submitRating(appointmentId) {
   } catch (e) {
     document.getElementById('ratingMsg').className = 'msg err';
     document.getElementById('ratingMsg').textContent = e.message;
+  }
+}
+
+// ============================================================
+// ===== MVP 4: Dashboard del AUDITOR =====
+// ============================================================
+
+async function loadAuditOverview() {
+  try {
+    const s = await api('/audit/stats/summary');
+    document.getElementById('auditSummaryCards').innerHTML = `
+      <div><strong>${s.total_entries}</strong><small>Total registros</small></div>
+      <div><strong>${s.by_event_type.length}</strong><small>Tipos de evento</small></div>
+      <div><strong>${s.by_resource_type.length}</strong><small>Tipos de recurso</small></div>
+      <div><strong>${s.last_entry_at ? new Date(s.last_entry_at).toLocaleTimeString() : '—'}</strong><small>Última entrada</small></div>`;
+    const maxEv = Math.max(...s.by_event_type.map(x => x.n), 1);
+    document.getElementById('auditByEventType').innerHTML = `
+      <div class="bar-chart">
+        ${s.by_event_type.map(x => `
+          <div class="bar-row">
+            <div class="lbl">${x.event_type}</div>
+            <div class="bar"><div class="bar-fill" style="width:${(x.n/maxEv*100).toFixed(1)}%"></div></div>
+            <div class="count">${x.n}</div>
+          </div>`).join('')}
+      </div>`;
+    const maxRes = Math.max(...s.by_resource_type.map(x => x.n), 1);
+    document.getElementById('auditByResource').innerHTML = `
+      <div class="bar-chart">
+        ${s.by_resource_type.map(x => `
+          <div class="bar-row">
+            <div class="lbl">${x.resource_type}</div>
+            <div class="bar"><div class="bar-fill" style="width:${(x.n/maxRes*100).toFixed(1)}%"></div></div>
+            <div class="count">${x.n}</div>
+          </div>`).join('')}
+      </div>`;
+  } catch (e) {
+    document.getElementById('auditSummaryCards').innerHTML = `<p class="msg err">${e.message}</p>`;
+  }
+}
+
+async function loadAuditLog() {
+  try {
+    const params = new URLSearchParams();
+    const ev = document.getElementById('filterEvent').value.trim();
+    const pat = document.getElementById('filterPatient').value.trim();
+    const res = document.getElementById('filterResource').value.trim();
+    if (ev) params.set('event_type', ev);
+    if (pat) params.set('patient_id', pat);
+    if (res) params.set('resource_type', res);
+    params.set('limit', '50');
+    const rows = await api('/audit?' + params);
+    const c = document.getElementById('auditLogTable');
+    if (!rows.length) { c.innerHTML = '<p class="muted">Sin registros.</p>'; return; }
+    c.innerHTML = rows.map(r => `
+      <div class="audit-row" data-seq="${r.seq}">
+        <div class="seq">#${r.seq}</div>
+        <div>
+          <div class="ev">${r.event_type}</div>
+          <div class="resource">${r.resource_type || '—'} ${r.resource_id ? '· ' + r.resource_id.substring(0,20) : ''}${r.patient_id ? ' · paciente ' + r.patient_id.substring(0,8) : ''}</div>
+          <div class="hash">prev: ${(r.prev_hash||'').substring(0,40)}... | entry: ${r.entry_hash.substring(0,40)}...</div>
+        </div>
+        <div style="text-align:right">
+          <div class="ts">${new Date(r.created_at).toLocaleString()}</div>
+          <button class="expand-btn" onclick="toggleAuditRow(${r.seq})">ver payload</button>
+        </div>
+        <pre class="full-payload">${escapeHtml(JSON.stringify(r.payload, null, 2))}</pre>
+      </div>`).join('');
+  } catch (e) {
+    document.getElementById('auditLogTable').innerHTML = `<p class="msg err">${e.message}</p>`;
+  }
+}
+
+function toggleAuditRow(seq) {
+  const el = document.querySelector(`.audit-row[data-seq="${seq}"]`);
+  if (el) el.classList.toggle('expanded');
+}
+
+function escapeHtml(s) { return (s||'').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+
+async function verifyChainIntegrity() {
+  const c = document.getElementById('integrityResult');
+  c.innerHTML = '<p class="muted">Verificando cadena (puede tardar varios segundos según volumen)...</p>';
+  try {
+    const r = await api('/audit/integrity/verify');
+    if (r.integrity === 'OK') {
+      c.innerHTML = `
+        <div class="integrity-ok integrity-result">
+          <h4>✅ CADENA ÍNTEGRA</h4>
+          <div>${r.checked_entries} entradas verificadas. Cero discrepancias.</div>
+          <div class="tip">Tip hash (raíz lógica): ${r.tip_hash}</div>
+        </div>`;
+    } else {
+      c.innerHTML = `
+        <div class="integrity-broken integrity-result">
+          <h4>❌ CADENA ROTA</h4>
+          <div>${r.breaches_found} discrepancias en ${r.checked_entries} entradas.</div>
+          <pre style="margin-top:8px;font-size:.75rem;background:rgba(255,255,255,.5);padding:8px;border-radius:4px;max-height:240px;overflow-y:auto">${JSON.stringify(r.breaches, null, 2)}</pre>
+        </div>`;
+    }
+  } catch (e) {
+    c.innerHTML = `<p class="msg err">${e.message}</p>`;
+  }
+}
+
+async function tryTamper() {
+  const seq = document.getElementById('tamperSeq').value;
+  if (!seq) return alert('Ingresa un seq');
+  const c = document.getElementById('tamperResult');
+  try {
+    const r = await fetch(API + `/audit/_demo/try-tamper/${seq}`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${TOKEN}` }
+    });
+    const data = await r.json();
+    if (data.tamper_blocked) {
+      c.innerHTML = `
+        <div class="integrity-ok integrity-result">
+          <h4>✅ Inmutabilidad confirmada</h4>
+          <p>${data.note}</p>
+          <pre style="margin-top:6px;font-size:.75rem">${escapeHtml(data.db_message)}</pre>
+        </div>`;
+    } else {
+      c.innerHTML = `<div class="integrity-broken integrity-result"><h4>⚠️ INESPERADO</h4><pre>${JSON.stringify(data)}</pre></div>`;
+    }
+  } catch (e) { c.innerHTML = `<p class="msg err">${e.message}</p>`; }
+}
+
+async function loadPatientAudit() {
+  const pid = document.getElementById('auditPatientId').value.trim();
+  if (!pid) return;
+  try {
+    const rows = await api(`/audit?patient_id=${pid}&limit=100`);
+    const c = document.getElementById('auditPatientTimeline');
+    if (!rows.length) { c.innerHTML = '<p class="muted">Sin actividad para este paciente.</p>'; return; }
+    c.innerHTML = `<div class="timeline">${rows.map(r => `
+      <div class="timeline-item">
+        <div class="ts">${new Date(r.created_at).toLocaleString()} • seq #${r.seq}</div>
+        <div class="ev">${r.event_type}</div>
+        <div class="res">${r.resource_type || '—'} ${r.resource_id ? '· ' + r.resource_id.substring(0,40) : ''} ${r.actor_role ? '· por ' + r.actor_role : ''}</div>
+      </div>`).join('')}</div>`;
+  } catch (e) {
+    document.getElementById('auditPatientTimeline').innerHTML = `<p class="msg err">${e.message}</p>`;
   }
 }
 
