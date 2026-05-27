@@ -50,14 +50,24 @@ function publishEvent(routingKey, payload) {
 }
 
 // === Initial seed: ensure 3 demo users with password "password123" ===
-async function ensureSeedHashes() {
+// Retry porque postgres puede no estar listo cuando arranca este servicio
+async function ensureSeedHashes(retries = 15) {
   const correctHash = await bcrypt.hash('password123', 10);
-  await pool.query(
-    `UPDATE users SET password_hash = $1
-     WHERE email IN ('paciente1@mc.com','medico1@mc.com','auditor@mc.com')`,
-    [correctHash]
-  );
-  console.log('[auth] seed password hashes ensured (password = password123)');
+  for (let i = 0; i < retries; i++) {
+    try {
+      const r = await pool.query(
+        `UPDATE users SET password_hash = $1
+         WHERE email IN ('paciente1@mc.com','medico1@mc.com','auditor@mc.com')`,
+        [correctHash]
+      );
+      console.log(`[auth] seed password hashes ensured (${r.rowCount} usuarios actualizados, password = password123)`);
+      return;
+    } catch (e) {
+      console.log(`[auth] seed retry ${i + 1}/${retries}: ${e.message}`);
+      await new Promise(r => setTimeout(r, 3000));
+    }
+  }
+  console.error('[auth] NO se pudieron sembrar las passwords tras todos los reintentos — el login con usuarios demo va a fallar.');
 }
 
 // === ENDPOINTS ===
@@ -129,8 +139,6 @@ app.get('/auth/verify', (req, res) => {
 
 app.listen(PORT, async () => {
   console.log(`[auth-service] listening on ${PORT}`);
-  try {
-    await ensureSeedHashes();
-  } catch (e) { console.error('seed update failed', e.message); }
+  await ensureSeedHashes();
   await connectRabbit();
 });
